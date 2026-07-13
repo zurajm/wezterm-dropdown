@@ -69,9 +69,6 @@ safe_link "$REPO_DIR/wezterm/dropdown_base.lua" "$HOME/.config/wezterm/dropdown_
 chmod +x "$REPO_DIR/scripts/wezterm-toggle.sh"
 safe_link "$REPO_DIR/scripts/wezterm-toggle.sh" "$HOME/.config/wezterm/bin/wezterm-toggle.sh"
 
-# ── KWin script ──────────────────────────────────────────────────────────── #
-safe_link "$REPO_DIR/kwin/wezterm-dropdown" "$HOME/.local/share/kwin/scripts/wezterm-dropdown"
-
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
@@ -80,7 +77,7 @@ echo ""
 echo "  1. Add the keyboard shortcut in KDE:"
 echo "     System Settings → Shortcuts → Add Command"
 echo "     Command: $HOME/.config/wezterm/bin/wezterm-toggle.sh"
-echo "     Shortcut: Ctrl+Alt+T (or your preference)"
+echo "     Shortcut: F12 (or your preference)"
 echo ""
 echo "  2. Test it:"
 echo "     $HOME/.config/wezterm/bin/wezterm-toggle.sh"

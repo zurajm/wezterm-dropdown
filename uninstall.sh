@@ -49,10 +49,11 @@ echo ""
 safe_unlink_owned "$HOME/.config/wezterm/dropdown.lua"
 safe_unlink_owned "$HOME/.config/wezterm/dropdown_base.lua"
 safe_unlink_owned "$HOME/.config/wezterm/bin/wezterm-toggle.sh"
-safe_unlink_owned "$HOME/.local/share/kwin/scripts/wezterm-dropdown"
 
-# Legacy cleanup: older versions also owned ~/.config/wezterm/wezterm.lua.
+# Legacy cleanup: older versions also owned ~/.config/wezterm/wezterm.lua
+# and a KWin script at ~/.local/share/kwin/scripts/wezterm-dropdown.
 safe_unlink_owned "$HOME/.config/wezterm/wezterm.lua"
+safe_unlink_owned "$HOME/.local/share/kwin/scripts/wezterm-dropdown"
 
 echo ""
 info "Done. Remember to remove the KDE keyboard shortcut manually:"
