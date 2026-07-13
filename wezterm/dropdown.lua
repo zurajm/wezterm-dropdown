@@ -8,7 +8,7 @@ local config = wezterm.config_builder()
 base.apply(config)
 
 -- Configuraciones específicas para el dropdown
-config.enable_tab_bar = false
+config.enable_tab_bar = true
 
 -- CRITICAL: Use "RESIZE", NOT "NONE".
 -- With "NONE", WezTerm tells KDE Wayland "I am a native fullscreen surface".
