@@ -13,6 +13,9 @@ readonly CLASS="wezterm-dropdown"
 readonly CONFIG="$HOME/.config/wezterm/dropdown.lua"
 readonly POLL_INTERVAL=0.05
 readonly POLL_MAX=160
+# Dropdown height as a fraction of monitor height (3 = 1/3 of screen).
+# Tweak this if you want a taller/shorter dropdown.
+readonly HEIGHT_FRACTION=3
 
 # ── Helpers ───────────────────────────────────────────────────────────────── #
 
@@ -74,6 +77,44 @@ mouse_screen() {
     screen_for_point "$mx" "$my"
 }
 
+# panel_offset_for_point <mx> <my>
+# Prints the height (in pixels) of any Plasma top panel that covers (mx, my).
+# Returns 0 if no panel covers that point. Used to offset the dropdown below
+# the status bar instead of hiding behind it.
+#
+# Implementation: enumerate plasmashell windows via kdotool, filter to ones
+# whose geometry covers (mx, my) with a small height (real panels, not full-
+# screen containments), and return the largest matching panel height.
+panel_offset_for_point() {
+    local mx=$1 my=$2
+    local max_h=0
+    local wid geom gx gy gw gh
+
+    while IFS= read -r wid; do
+        [[ -z "$wid" ]] && continue
+        geom=$(kdotool getwindowgeometry "$wid" 2>/dev/null) || continue
+        # Parse "  Position: X,Y\n  Geometry: WxH".
+        # Awk skips leading whitespace, so the field index differs by line:
+        #   Position  -> $1="Position:" $2="X,Y"   (split further on comma)
+        #   Geometry  -> $1="Geometry:" $2="WxH"   (split further on x)
+        local x y w h
+        x=$(awk '/Position/{split($2,a,","); print a[1]; exit}' <<< "$geom")
+        y=$(awk '/Position/{split($2,a,","); print a[2]; exit}' <<< "$geom")
+        w=$(awk '/Geometry/{split($2,a,"x"); print a[1]; exit}' <<< "$geom")
+        h=$(awk '/Geometry/{split($2,a,"x"); print a[2]; exit}' <<< "$geom")
+        # Only consider panels at the top edge (y == 0) with sensible height.
+        # Skip full-screen containments (no panel) and anything that's clearly
+        # not a top-edge panel (y > 50 or no height).
+        [[ -z "$h" || "$y" != "0" || "$h" -ge 200 ]] && continue
+        # Does this top-edge panel cover the mouse horizontally?
+        if (( x <= mx && mx < x + w )); then
+            (( h > max_h )) && max_h=$h
+        fi
+    done < <(kdotool search "plasmashell" 2>/dev/null)
+
+    echo "$max_h"
+}
+
 # animate <wid> <x> <y> <w> <h> <in|out>
 # Slides the window in (from above) or out (upward), then minimises on 'out'.
 # Uses cubic easing: ease-out for 'in' (fast start, soft landing),
@@ -128,10 +169,22 @@ if [[ -z "$WINDOW_ID" ]]; then
     if [[ -n "$NEW_ID" && -n "$TX" ]]; then
         kdotool windowstate --add NO_BORDER "$NEW_ID"
         ensure_sticky  # pin to all virtual desktops via KWin scripting
-        kdotool windowmove   "$NEW_ID" "$TX" "$((TY - TH))"
-        kdotool windowsize   "$NEW_ID" "$TW" "$TH"
+
+        # Re-query mouse so we know which monitor we're on for panel offset.
+        loc=$(kdotool getmouselocation 2>/dev/null)
+        mx=$(grep -oP 'x:\K[0-9]+' <<< "$loc")
+        my=$(grep -oP 'y:\K[0-9]+' <<< "$loc")
+        PANEL_OFF=$(panel_offset_for_point "$mx" "$my")
+        PANEL_OFF=${PANEL_OFF:-0}
+
+        DROP_H=$((TH / HEIGHT_FRACTION))
+        TARGET_Y=$((TY + PANEL_OFF))
+        START_Y=$((TARGET_Y - DROP_H))
+
+        kdotool windowmove   "$NEW_ID" "$TX" "$START_Y"
+        kdotool windowsize   "$NEW_ID" "$TW" "$DROP_H"
         sleep 0.05
-        animate "$NEW_ID" "$TX" "$TY" "$TW" "$TH" in
+        animate "$NEW_ID" "$TX" "$TARGET_Y" "$TW" "$DROP_H" in
     fi
     exit 0
 fi
@@ -153,14 +206,26 @@ read -r TX TY TW TH < <(mouse_screen)
 if [[ -n "$TX" ]]; then
     # Re-ensure onAllDesktops (may have been lost after KWin restart)
     ensure_sticky
+
+    # Re-query mouse for panel offset on this monitor.
+    loc=$(kdotool getmouselocation 2>/dev/null)
+    mx=$(grep -oP 'x:\K[0-9]+' <<< "$loc")
+    my=$(grep -oP 'y:\K[0-9]+' <<< "$loc")
+    PANEL_OFF=$(panel_offset_for_point "$mx" "$my")
+    PANEL_OFF=${PANEL_OFF:-0}
+
+    DROP_H=$((TH / HEIGHT_FRACTION))
+    TARGET_Y=$((TY + PANEL_OFF))
+    START_Y=$((TARGET_Y - DROP_H))
+
     # Set geometry before minimising so KDE records the new position
-    kdotool windowmove     "$WINDOW_ID" "$TX" "$((TY - TH))"
-    kdotool windowsize     "$WINDOW_ID" "$TW" "$TH"
+    kdotool windowmove     "$WINDOW_ID" "$TX" "$START_Y"
+    kdotool windowsize     "$WINDOW_ID" "$TW" "$DROP_H"
     kdotool windowminimize "$WINDOW_ID" 2>/dev/null
     sleep 0.15
     kdotool windowactivate "$WINDOW_ID" 2>/dev/null
     sleep 0.05
-    animate "$WINDOW_ID" "$TX" "$TY" "$TW" "$TH" in
+    animate "$WINDOW_ID" "$TX" "$TARGET_Y" "$TW" "$DROP_H" in
 else
     kdotool windowactivate "$WINDOW_ID"
 fi
