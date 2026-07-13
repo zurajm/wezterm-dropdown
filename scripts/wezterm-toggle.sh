@@ -11,6 +11,7 @@ set -uo pipefail
 # ── Configuration ─────────────────────────────────────────────────────────── #
 readonly CLASS="wezterm-dropdown"
 readonly CONFIG="$HOME/.config/wezterm/dropdown.lua"
+readonly DOMAIN="dropdown"
 readonly POLL_INTERVAL=0.05
 readonly POLL_MAX=160
 # Dropdown height as a fraction of monitor height (3 = 1/3 of screen).
@@ -154,8 +155,33 @@ WINDOW_ID=$(kdotool search --class "$CLASS" 2>/dev/null | head -n 1)
 # Case 1: Not running — launch, move off-screen immediately, slide in
 if [[ -z "$WINDOW_ID" ]]; then
     read -r TX TY TW TH < <(mouse_screen)
-    wezterm --config-file "$CONFIG" start \
-        --always-new-process --class "$CLASS" --workspace "dropdown" &
+
+    # Prefer reusing the dropdown's mux server (no KWin placement race).
+    # If the mux isn't running (first ever press, or after a logout),
+    # start a long-running wezterm-gui that registers the mux. All future
+    # F12 presses hit the mux and avoid the race entirely.
+    #
+    # NOTE: `--domain` is a `wezterm start`/`cli spawn` flag, NOT a
+    # `wezterm-gui` flag. The dropdown's mux domain is defined inside
+    # dropdown.lua via `config.unix_domains = { { name = "dropdown" } }`.
+    #
+    # Probe: if the dropdown's wezterm-gui is already running, its mux is up
+    # and reachable. Otherwise we need to start it. We use pgrep because
+    # `wezterm cli list` has no --domain-name filter.
+    if pgrep -af "wezterm-gui.*--class $CLASS" >/dev/null 2>&1; then
+        # Mux up — spawn a new window in the existing dropdown instance.
+        # The class for the spawned window comes from the parent wezterm-gui
+        # (started with --class wezterm-dropdown); cli spawn doesn't take --class.
+        wezterm cli spawn --domain-name "$DOMAIN" --new-window \
+            --workspace "$DOMAIN" >/dev/null 2>&1
+    else
+        # Mux down — start the long-running dropdown wezterm-gui.
+        # Args go: --config-file on wezterm-gui (top-level), then `start`
+        # subcommand accepts --class and --workspace.
+        nohup wezterm-gui --config-file "$CONFIG" start \
+            --class "$CLASS" --workspace "$DOMAIN" \
+            >/dev/null 2>&1 &
+    fi
 
     # Poll every 50ms (up to 8s) — catch the window the moment it appears
     # so we can move it off-screen before the user ever sees it.
