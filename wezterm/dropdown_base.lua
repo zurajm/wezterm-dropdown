@@ -8,7 +8,7 @@ function M.apply(config)
   config.color_scheme = 'Dracula'
   config.window_background_opacity = 0.85
   config.font = wezterm.font_with_fallback({
-    'JetBrainsMono NF',
+    'JetBrainsMono NFM',
     'Symbols Nerd Font Mono',
   })
   config.font_size = 11.0
