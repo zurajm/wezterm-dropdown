@@ -20,9 +20,18 @@ readonly HEIGHT_FRACTION=3
 
 # ── Helpers ───────────────────────────────────────────────────────────────── #
 
-# ensure_sticky
-# Sets onAllDesktops=true via KWin scripting (qdbus6), so the window exists
-# on every virtual desktop and activating it never triggers a desktop switch.
+# ensure_dropdown_properties
+# Sets the dropdown window's properties via KWin scripting:
+#   - onAllDesktops = true       (visible on every virtual desktop)
+#   - skipTaskbar   = true       (hide from icon-only + regular taskbar)
+#   - activities     = []        (visible on every activity)
+#
+# Uses the windowAdded event handler so properties apply at window
+# creation time, before the user sees the window. This is more reliable
+# than kwinrulesrc because:
+#   - kwinrulesrc is rewritten/overwritten by systemsettings on edit
+#   - rules apply only on full KWin restart (DBus reloadConfig is
+#     insufficient for the rules subsystem)
 #
 # KDE6 API notes (verified via journalctl):
 #   - workspace.clientList() → REMOVED in KDE6 (was X11-era API)
@@ -30,25 +39,38 @@ readonly HEIGHT_FRACTION=3
 #   - workspace.windowList() → correct KDE6 replacement (it's a function)
 #   - Execution: loadScript() + /Scripting start() — NOT Script{N}.run()
 #     (the Script{N} DBus object may not exist yet when run() is called)
-ensure_sticky() {
+ensure_dropdown_properties() {
     local tmpscript plugin_name
     tmpscript=$(mktemp --suffix=.js)
-    plugin_name="wt-sticky-$$"
+    plugin_name="wt-props-$$"
     cat > "$tmpscript" << 'KWSCRIPT'
 var w = workspace.windowList();
 for (var i = 0; i < w.length; i++) {
     if (w[i].resourceClass === "wezterm-dropdown") {
         w[i].onAllDesktops = true;
+        w[i].skipTaskbar   = true;
+        w[i].activities    = [];
     }
 }
+// Also catch any newly-created dropdown window (e.g. via cli spawn).
+workspace.windowAdded.connect(function(win) {
+    if (win.resourceClass === "wezterm-dropdown") {
+        win.onAllDesktops = true;
+        win.skipTaskbar   = true;
+        win.activities    = [];
+    }
+});
 KWSCRIPT
     qdbus6 org.kde.KWin /Scripting unloadScript "$plugin_name" 2>/dev/null || true
-    qdbus6 org.kde.KWin /Scripting loadScript "$tmpscript" "$plugin_name" 2>/dev/null
-    qdbus6 org.kde.KWin /Scripting start 2>/dev/null || true
-    sleep 0.1
-    qdbus6 org.kde.KWin /Scripting unloadScript "$plugin_name" 2>/dev/null || true
+    qdbus6 org.kde.KWin /Scripting loadScript   "$tmpscript" "$plugin_name" >/dev/null 2>&1
+    qdbus6 org.kde.KWin /Scripting start        >/dev/null 2>&1
+    sleep 0.15
+    qdbus6 org.kde.KWin /Scripting unloadScript "$plugin_name" >/dev/null 2>&1 || true
     rm -f "$tmpscript"
 }
+
+# Backwards-compat alias — original name was 'ensure_sticky'.
+ensure_sticky() { ensure_dropdown_properties; }
 
 # screen_for_point <mx> <my>
 # Prints "X Y W H" of the monitor containing the given point.
