@@ -218,11 +218,12 @@ if [[ -n "$TX" ]]; then
     TARGET_Y=$((TY + PANEL_OFF))
     START_Y=$((TARGET_Y - DROP_H))
 
-    # Set geometry before minimising so KDE records the new position
+    # Set geometry before showing so KDE records the new position.
+    # Skip the minimise step — `windowactivate` un-minimises if needed, and
+    # if the window is just covered by another app, we don't want to bounce
+    # it through minimise→restore (which produces a visible flash).
     kdotool windowmove     "$WINDOW_ID" "$TX" "$START_Y"
     kdotool windowsize     "$WINDOW_ID" "$TW" "$DROP_H"
-    kdotool windowminimize "$WINDOW_ID" 2>/dev/null
-    sleep 0.15
     kdotool windowactivate "$WINDOW_ID" 2>/dev/null
     sleep 0.05
     animate "$WINDOW_ID" "$TX" "$TARGET_Y" "$TW" "$DROP_H" in
